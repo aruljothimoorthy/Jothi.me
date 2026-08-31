@@ -26,9 +26,15 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          if [ ! -f package-lock.json ]; then
+            echo "Error: package-lock.json is missing. Commit it alongside package.json."
+            exit 1
+          fi
+          npm ci
 
       - name: Build static site
         run: npm run build
@@ -45,6 +51,8 @@ jobs:
             exit 1
           fi
           touch dist/client/.nojekyll
+          echo "Prerendered routes:"
+          find dist/client -name "index.html" | sort
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
