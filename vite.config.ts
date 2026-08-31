@@ -4,8 +4,8 @@ import viteReact from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import tsConfigPaths from "vite-tsconfig-paths";
 
-/** GitHub Pages project site: https://aruljothimoorthy.github.io/Arul.me/ */
-const GITHUB_PAGES_BASE = "/Arul.me/";
+/** GitHub Pages project site: https://aruljothimoorthy.github.io/Jothi.me/ */
+const GITHUB_PAGES_BASE = "/Jothi.me/";
 
 const portfolioRoutes = [
   "/",
@@ -32,7 +32,7 @@ export default defineConfig({
     tanstackStart({
       server: { entry: "server" },
       router: {
-        basepath: "/Arul.me",
+        basepath: "/Jothi.me",
       },
       prerender: {
         enabled: true,
