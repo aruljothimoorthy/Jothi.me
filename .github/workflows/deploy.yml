@@ -30,6 +30,8 @@ jobs:
 
       - name: Install dependencies
         run: |
+          echo "Node: $(node -v)"
+          echo "npm: $(npm -v)"
           if [ ! -f package-lock.json ]; then
             echo "Error: package-lock.json is missing. Commit it alongside package.json."
             exit 1
