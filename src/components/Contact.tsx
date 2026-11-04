@@ -30,6 +30,11 @@ function isTruthySuccess(value: unknown) {
   return value === true || value === "true" || value === 1 || value === "1";
 }
 
+// Web3Forms access keys are public by design (client-side). Env overrides if set.
+const WEB3FORMS_ACCESS_KEY =
+  import.meta.env.VITE_WEB3FORMS_ACCESS_KEY?.trim() ||
+  "a9380648-eccd-4216-b0ae-3a09c93d9ef1";
+
 /** Web3Forms free tier must be called from the browser (not the server). */
 async function sendViaWeb3FormsClient(payload: {
   name: string;
@@ -37,11 +42,9 @@ async function sendViaWeb3FormsClient(payload: {
   phone?: string;
   message: string;
 }) {
-  const accessKey = import.meta.env.VITE_WEB3FORMS_ACCESS_KEY?.trim();
+  const accessKey = WEB3FORMS_ACCESS_KEY;
   if (!accessKey) {
-    throw new Error(
-      "Add VITE_WEB3FORMS_ACCESS_KEY to your .env, then restart npm run dev.",
-    );
+    throw new Error("Contact form is not configured. Please try again later.");
   }
 
   const response = await fetch("https://api.web3forms.com/submit", {
@@ -149,7 +152,7 @@ export function Contact() {
 
     try {
       // Prefer browser Web3Forms first (free tier blocks server-side calls).
-      if (import.meta.env.VITE_WEB3FORMS_ACCESS_KEY?.trim()) {
+      if (WEB3FORMS_ACCESS_KEY) {
         await sendViaWeb3FormsClient(payload);
         setStatus("success");
         return;
