@@ -26,70 +26,54 @@ const workflowSteps = [
   { label: "LEARN", Icon: BookOpen, color: "#e2e8f0", glow: "rgba(226,232,240,0.25)" },
 ] as const;
 
-class FormActivationNeededError extends Error {
-  constructor() {
-    super(
-      `Check ${CONTACT_TO} for an email from FormSubmit and click “Activate Form”. This is a one-time step — then submit again.`,
-    );
-    this.name = "FormActivationNeededError";
-  }
+function isTruthySuccess(value: unknown) {
+  return value === true || value === "true" || value === 1 || value === "1";
 }
 
-/**
- * FormSubmit's /ajax endpoint often omits CORS headers, so browser fetch fails.
- * A classic form POST into a hidden iframe avoids CORS entirely.
- */
-async function sendViaFormSubmitClient(payload: {
+/** Web3Forms free tier must be called from the browser (not the server). */
+async function sendViaWeb3FormsClient(payload: {
   name: string;
   email: string;
   phone?: string;
   message: string;
 }) {
-  if (typeof window !== "undefined" && window.location.protocol === "file:") {
+  const accessKey = import.meta.env.VITE_WEB3FORMS_ACCESS_KEY?.trim();
+  if (!accessKey) {
     throw new Error(
-      "Open this site with a web server (npm run dev), not as a local HTML file.",
+      "Add VITE_WEB3FORMS_ACCESS_KEY to your .env, then restart npm run dev.",
     );
   }
 
-  const iframeName = `formsubmit_${Date.now()}`;
-  const iframe = document.createElement("iframe");
-  iframe.name = iframeName;
-  iframe.title = "FormSubmit";
-  iframe.style.display = "none";
-  document.body.appendChild(iframe);
+  const response = await fetch("https://api.web3forms.com/submit", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({
+      access_key: accessKey,
+      subject: `Portfolio contact from ${payload.name}`,
+      from_name: "Portfolio Contact",
+      name: payload.name,
+      email: payload.email,
+      phone: payload.phone || "—",
+      message: payload.message,
+      replyto: payload.email,
+      botcheck: false,
+    }),
+  });
 
-  const form = document.createElement("form");
-  form.method = "POST";
-  form.action = `https://formsubmit.co/${CONTACT_TO}`;
-  form.target = iframeName;
-  form.style.display = "none";
+  const body = await response.json().catch(() => ({} as Record<string, unknown>));
+  const apiMessage =
+    typeof body?.message === "string"
+      ? body.message
+      : typeof (body?.body as { message?: unknown } | undefined)?.message === "string"
+        ? (body.body as { message: string }).message
+        : null;
 
-  const fields: Record<string, string> = {
-    name: payload.name,
-    email: payload.email,
-    phone: payload.phone || "—",
-    message: payload.message,
-    _replyto: payload.email,
-    _subject: `Portfolio contact from ${payload.name}`,
-    _template: "table",
-    _captcha: "false",
-  };
-
-  for (const [name, value] of Object.entries(fields)) {
-    const input = document.createElement("input");
-    input.type = "hidden";
-    input.name = name;
-    input.value = value;
-    form.appendChild(input);
+  if (!response.ok || !isTruthySuccess(body?.success)) {
+    throw new Error(apiMessage || "Failed to send message. Please try again later.");
   }
-
-  document.body.appendChild(form);
-  form.submit();
-
-  // Cross-origin iframe responses can't be read; give FormSubmit time to accept.
-  await new Promise((resolve) => window.setTimeout(resolve, 1800));
-  form.remove();
-  iframe.remove();
 }
 
 function WorkflowCard() {
@@ -164,6 +148,13 @@ export function Contact() {
     };
 
     try {
+      // Prefer browser Web3Forms first (free tier blocks server-side calls).
+      if (import.meta.env.VITE_WEB3FORMS_ACCESS_KEY?.trim()) {
+        await sendViaWeb3FormsClient(payload);
+        setStatus("success");
+        return;
+      }
+
       const result = await sendContactMessage({ data: payload });
 
       if (result?.ok === true) {
@@ -172,18 +163,13 @@ export function Contact() {
       }
 
       if (result?.needsClientFallback) {
-        await sendViaFormSubmitClient(payload);
+        await sendViaWeb3FormsClient(payload);
         setStatus("success");
         return;
       }
 
       throw new Error("Message was not confirmed as sent. Please try again.");
     } catch (err) {
-      if (err instanceof FormActivationNeededError) {
-        setStatus("activate");
-        setErrorMsg(err.message);
-        return;
-      }
       setStatus("error");
       const message =
         err instanceof Error
@@ -378,6 +364,11 @@ export function Contact() {
                       {errorMsg || "Failed to send message. Please try again."}
                     </p>
                   )}
+
+                  <p className="text-center text-xs text-muted-foreground">
+                    Messages are delivered to{" "}
+                    <span className="text-cyan">{CONTACT_TO}</span>.
+                  </p>
 
                   <div className="flex justify-center pt-1">
                     <Magnetic>

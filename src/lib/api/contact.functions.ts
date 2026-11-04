@@ -19,10 +19,6 @@ const contactSchema = z.object({
 
 export type ContactPayload = z.infer<typeof contactSchema>;
 
-function isTruthySuccess(value: unknown) {
-  return value === true || value === "true" || value === 1 || value === "1";
-}
-
 function escapeHtml(value: string) {
   return value
     .replaceAll("&", "&amp;")
@@ -66,36 +62,6 @@ async function sendWithResend(data: ContactPayload, apiKey: string) {
   }
 }
 
-async function sendWithWeb3Forms(data: ContactPayload, accessKey: string) {
-  const response = await fetch("https://api.web3forms.com/submit", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({
-      access_key: accessKey,
-      subject: `Portfolio contact from ${data.name}`,
-      from_name: data.name,
-      email: data.email,
-      phone: phoneLine(data),
-      message: data.message,
-      replyto: data.email,
-      to: CONTACT_TO,
-    }),
-  });
-
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok || !isTruthySuccess(body?.success)) {
-    console.error("Web3Forms error:", body);
-    throw new Error(
-      typeof body?.message === "string"
-        ? body.message
-        : "Failed to send message. Please try again later.",
-    );
-  }
-}
-
 async function sendWithFormspree(data: ContactPayload, formId: string) {
   const response = await fetch(`https://formspree.io/f/${formId}`, {
     method: "POST",
@@ -121,27 +87,22 @@ async function sendWithFormspree(data: ContactPayload, formId: string) {
 }
 
 /**
- * Server-only mailer for Resend / Web3Forms / Formspree.
- * FormSubmit is intentionally NOT used here — it requires a browser Origin
- * and fails with "open this page through a web server" when called from Node.
- * The client falls back to FormSubmit when needsClientFallback is true.
+ * Server mailer for Resend / Formspree only.
+ * Web3Forms free tier must run in the browser (Contact.tsx) — server calls are blocked.
  */
 export const sendContactMessage = createServerFn({ method: "POST" })
   .validator(contactSchema)
   .handler(async ({ data }) => {
     const resendKey = process.env.RESEND_API_KEY?.trim();
-    const web3Key = process.env.WEB3FORMS_ACCESS_KEY?.trim();
     const formspreeId = process.env.FORMSPREE_FORM_ID?.trim();
 
-    if (!resendKey && !web3Key && !formspreeId) {
+    if (!resendKey && !formspreeId) {
       return { ok: false as const, needsClientFallback: true as const };
     }
 
     try {
       if (resendKey) {
         await sendWithResend(data, resendKey);
-      } else if (web3Key) {
-        await sendWithWeb3Forms(data, web3Key);
       } else if (formspreeId) {
         await sendWithFormspree(data, formspreeId);
       }
