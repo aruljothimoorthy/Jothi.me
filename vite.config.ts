@@ -1,11 +1,14 @@
+
 import { defineConfig } from "vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import tsConfigPaths from "vite-tsconfig-paths";
+import { nitro } from "nitro/vite";
 
-/** GitHub Pages project site: https://aruljothimoorthy.github.io/Jothi.me/ */
-const GITHUB_PAGES_BASE = "/Jothi.me/";
+// GitHub Pages uses /Jothi.me/.
+// Vercel uses the domain root.
+const isGitHubPages = process.env.GITHUB_PAGES === "true";
 
 const portfolioRoutes = [
   "/",
@@ -18,21 +21,23 @@ const portfolioRoutes = [
 ] as const;
 
 export default defineConfig({
-  base: GITHUB_PAGES_BASE,
+  base: isGitHubPages ? "/Jothi.me/" : "/",
+
   server: {
     port: 3000,
-    // Avoid Windows EBUSY crashes when asset files are open or being copied
     watch: {
       usePolling: true,
       interval: 1000,
     },
   },
+
   plugins: [
     tsConfigPaths({ projects: ["./tsconfig.json"] }),
+
     tanstackStart({
       server: { entry: "server" },
       router: {
-        basepath: "/Jothi.me",
+        basepath: isGitHubPages ? "/Jothi.me" : "/",
       },
       prerender: {
         enabled: true,
@@ -40,6 +45,8 @@ export default defineConfig({
       },
       pages: portfolioRoutes.map((path) => ({ path })),
     }),
+
+    nitro(),
     viteReact(),
     tailwindcss(),
   ],
