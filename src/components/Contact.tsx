@@ -26,10 +26,6 @@ const workflowSteps = [
   { label: "LEARN", Icon: BookOpen, color: "#e2e8f0", glow: "rgba(226,232,240,0.25)" },
 ] as const;
 
-function isTruthySuccess(value: unknown) {
-  return value === true || value === "true" || value === 1 || value === "1";
-}
-
 class FormActivationNeededError extends Error {
   constructor() {
     super(
@@ -39,7 +35,10 @@ class FormActivationNeededError extends Error {
   }
 }
 
-/** FormSubmit must run in the browser over http(s) — not from Node, not from file:// */
+/**
+ * FormSubmit's /ajax endpoint often omits CORS headers, so browser fetch fails.
+ * A classic form POST into a hidden iframe avoids CORS entirely.
+ */
 async function sendViaFormSubmitClient(payload: {
   name: string;
   email: string;
@@ -52,45 +51,45 @@ async function sendViaFormSubmitClient(payload: {
     );
   }
 
-  const response = await fetch(`https://formsubmit.co/ajax/${CONTACT_TO}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({
-      name: payload.name,
-      email: payload.email,
-      phone: payload.phone || "—",
-      message: payload.message,
-      _replyto: payload.email,
-      _subject: `Portfolio contact from ${payload.name}`,
-      _template: "table",
-      _captcha: "false",
-    }),
-  });
+  const iframeName = `formsubmit_${Date.now()}`;
+  const iframe = document.createElement("iframe");
+  iframe.name = iframeName;
+  iframe.title = "FormSubmit";
+  iframe.style.display = "none";
+  document.body.appendChild(iframe);
 
-  const body = await response.json().catch(() => ({} as Record<string, unknown>));
-  const msg = typeof body?.message === "string" ? body.message : "";
-  const lower = msg.toLowerCase();
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = `https://formsubmit.co/${CONTACT_TO}`;
+  form.target = iframeName;
+  form.style.display = "none";
 
-  if (lower.includes("web server") || lower.includes("html files")) {
-    throw new Error(
-      "FormSubmit needs a real web server. Run `npm run dev` and open the localhost URL.",
-    );
+  const fields: Record<string, string> = {
+    name: payload.name,
+    email: payload.email,
+    phone: payload.phone || "—",
+    message: payload.message,
+    _replyto: payload.email,
+    _subject: `Portfolio contact from ${payload.name}`,
+    _template: "table",
+    _captcha: "false",
+  };
+
+  for (const [name, value] of Object.entries(fields)) {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = name;
+    input.value = value;
+    form.appendChild(input);
   }
 
-  if (
-    lower.includes("activation") ||
-    lower.includes("activate form") ||
-    lower.includes("activate")
-  ) {
-    throw new FormActivationNeededError();
-  }
+  document.body.appendChild(form);
+  form.submit();
 
-  if (!response.ok || !isTruthySuccess(body?.success)) {
-    throw new Error(msg || "Failed to send message. Please try again later.");
-  }
+  // Cross-origin iframe responses can't be read; give FormSubmit time to accept.
+  await new Promise((resolve) => window.setTimeout(resolve, 1800));
+  form.remove();
+  iframe.remove();
 }
 
 function WorkflowCard() {
